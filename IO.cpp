@@ -3,52 +3,75 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <type_traits>
+#include <concepts>
+
+template <Enum T> 
+void write_vtk_snapshot(NBodySimulation nbs, int snapshot_number) {
+
+}
+
+template<> 
+void vtk_writer<Layout::SOA>::write_vtk_snapshot(NBodySimulation nbs, int snapshot_number) {
+
+}
+
+template<>
+void vtk_writer<Layout::AOS>::write_vtk_snapshot(NBodySimulation nbs, int snapshot_number) {
+
+}
+
+template<>
+void vtk_writer<Layout::AOSOA>::write_vtk_snapshot(NBodySimulation nbs, int snapshot_number) {
+
+}
+
 
 //template <typename T> 
-void writeVTKSnapshot(NBodySimulation nbs, BodyType body, int snapshotNumber) {
-    std::ostringstream filename;
-    filename << "paraview-output/result-" << snapshotNumber << ".vtp";
-    std::ofstream out(filename.str());
-    if (!out) {
-        std::cerr << "Failed to open output file " << filename.str() << "\n";
-        return;
-    }
-
-    out << "<VTKFile type=\"PolyData\">\n";
-    out << "<PolyData>\n";
-    // If you modify the data structures containing bodies, this line
-    // needs to be modified
-    switch (body) {
-        case BodyType::AOS: 
-			out << " <Piece NumberOfPoints=\"" << nbs.bodies_aos.size() << "\">\n";
-			out << "  <Points>\n";
-			out << "   <DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">";
-			return;
-        case BodyType::SOA: 
-			out << " <Piece NumberOfPoints=\"" << nbs.bodies_soa.number_of_bodies << "\">\n";
-			out << "  <Points>\n";
-			out << "   <DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">";
-            return; 
-        case BodyType::AOSOA: 
-			out << " <Piece NumberOfPoints=\"" << nbs.bodies_aosoa.size() << "\">\n";
-			out << "  <Points>\n";
-			out << "   <DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">";
-            return; 
-    } 
-    // If you modify the data structures containing bodies, this for loop 
-    // needs to be modified
-    for (const auto& b : bodies) {
-        out << b.x[0] << " " << b.x[1] << " " << b.x[2] << " ";
-    }
-
-    out << "</DataArray>\n";
-    out << "  </Points>\n";
-    out << " </Piece>\n";
-    out << "</PolyData>\n";
-    out << "</VTKFile>\n";
-
-    out.close();
-}
+//void writeVTKSnapshot(NBodySimulation nbs, BodyType body, int snapshotNumber) {
+//    std::ostringstream filename;
+//    filename << "paraview-output/result-" << snapshotNumber << ".vtp";
+//    std::ofstream out(filename.str());
+//    if (!out) {
+//        std::cerr << "Failed to open output file " << filename.str() << "\n";
+//        return;
+//    }
+//
+//    out << "<VTKFile type=\"PolyData\">\n";
+//    out << "<PolyData>\n";
+//    // If you modify the data structures containing bodies, this line
+//    // needs to be modified
+//    switch (body) {
+//        case BodyType::AOS: 
+//			out << " <Piece NumberOfPoints=\"" << nbs.bodies_aos.size() << "\">\n";
+//			out << "  <Points>\n";
+//			out << "   <DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">";
+//			return;
+//        case BodyType::SOA: 
+//			out << " <Piece NumberOfPoints=\"" << nbs.bodies_soa.number_of_bodies << "\">\n";
+//			out << "  <Points>\n";
+//			out << "   <DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">";
+//            return; 
+//        case BodyType::AOSOA: 
+//			out << " <Piece NumberOfPoints=\"" << nbs.bodies_aosoa.size() << "\">\n";
+//			out << "  <Points>\n";
+//			out << "   <DataArray type=\"Float64\" NumberOfComponents=\"3\" format=\"ascii\">";
+//            return; 
+//    } 
+//    // If you modify the data structures containing bodies, this for loop 
+//    // needs to be modified
+//    for (const auto& b : bodies) {
+//        out << b.x[0] << " " << b.x[1] << " " << b.x[2] << " ";
+//    }
+//
+//    out << "</DataArray>\n";
+//    out << "  </Points>\n";
+//    out << " </Piece>\n";
+//    out << "</PolyData>\n";
+//    out << "</VTKFile>\n";
+//
+//    out.close();
+//}
 
 void openPVDFile() {
     std::ofstream pvdFile("paraview-output/result.pvd", std::ios::out);

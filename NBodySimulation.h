@@ -11,11 +11,16 @@
 
 constexpr size_t block_size{ 4 };
 
+// Optimisations: 
+// Hot vs Cold data
+// Batching (Storage and Running)
+// Template specialization instead of 'if' statements to prevent branch mis-prediction
+
 struct Body {
 	// AoS vs SoA vs AoSoA
-    double x[3];						// position in x, y, z
-    double v[3];						// velocity in x, y, z
-    double mass;						// mass of body
+    std::array<double, 3> x;						// position in x, y, z
+    std::array<double, 3> v;						// velocity in x, y, z
+    double mass;									// mass of body
 };
 
 // Body's position and velocity one time step behind
@@ -30,17 +35,20 @@ struct BodySoA {
 	// affecting cache locality and they take a longer time to 
 	// allocate to heap compared to stack (faster allocation)
 
-	std::unique_ptr<double[]> x; 
-	std::unique_ptr<double[]> y; 
-	std::unique_ptr<double[]> z; 
-	std::unique_ptr<double[]> velocity_x; 
-	std::unique_ptr<double[]> velocity_y; 
-	std::unique_ptr<double[]> velocity_z; 
+private: 
+	const int number_of_bodies; 
+
+public: 
+	std::unique_ptr<double[]> x;
+	std::unique_ptr<double[]> y;
+	std::unique_ptr<double[]> z;
+	std::unique_ptr<double[]> velocity_x;
+	std::unique_ptr<double[]> velocity_y;
+	std::unique_ptr<double[]> velocity_z;
 	std::unique_ptr<double[]> mass;
-	size_t number_of_bodies; 
 
 	BodySoA(long long number_of_bodies) : number_of_bodies(number_of_bodies) {
-		x = std::make_unique<double[]>(number_of_bodies);			
+		x = std::make_unique<double[]>(number_of_bodies);
 		y = std::make_unique<double[]>(number_of_bodies);
 		z = std::make_unique<double[]>(number_of_bodies);
 		velocity_x = std::make_unique<double[]>(number_of_bodies);
@@ -50,6 +58,7 @@ struct BodySoA {
 	}
 
 	BodySoA() : number_of_bodies(0) {}
+
 };
 
 struct BodyAoSoA {
@@ -71,21 +80,21 @@ public:
     double snapshot_interval;
     double endtime;
     double dt;
-	long long number_of_bodies{};
+	int number_of_bodies{};
 
     // If you exchange this data structure, make sure to update the constructor as well
     // If need be add a destructor to the class
 
-	BodySoA bodies_soa;								// bodies Structure of Arrays
-	std::vector<BodyAoS> bodies;					// bodies Original
-    std::vector<BodyAoS> bodies_aos;				// bodies at actual time
-	std::vector<BodyAoS> bodies_aos_l; 				// bodies at one less timestep (lagging behind)								
-	std::vector<BodyAoSoA> bodies_aosoa; 			// bodies Array of Structure of Arrays
+	BodySoA bodies_soa;												// bodies Structure of Arrays
+	std::vector<BodyAoS> bodies;									// bodies Original
+    std::vector<BodyAoS> bodies_aos;								// bodies at actual time
+	std::vector<BodyAoS> bodies_aos_l; 								// bodies at one less timestep (lagging behind)								
+	std::vector<BodyAoSoA> bodies_aosoa; 							// bodies Array of Structure of Arrays
 
     NBodySimulation() 
 	    : snapshot_interval(0.01), endtime(1.0), dt(0.001), bodies() {
 		    // If no input is given use a simple 3 body problem
-		    Body b;
+		    BodyAoS b;
 		    b.x[0] = 0.0; b.x[1] = 0.0; b.x[2] = 0.0;
 		    b.v[0] = 1.0; b.v[1] = 0.0; b.v[2] = 0.0;
 		    b.mass = 1.0;
@@ -131,7 +140,7 @@ public:
 		
 		infile >> snapshot_interval >> endtime >> dt; 
 
-		number_of_bodies = -1;							// comment out if we are only using SoA
+		number_of_bodies = -1;										// comment out if we are only using SoA
 		while (getline(infile, line)) {
 			number_of_bodies += 1; 
 		}
@@ -145,7 +154,7 @@ public:
 		double velocity_y{}; 
 		double velocity_z{}; 
 		double mass{}; 
-		bodies_soa = BodySoA(number_of_bodies); 
+		BodySoA soa(number_of_bodies); 
 		size_t index{}; 
 		while (infile >> x >> y >> z
 			>> velocity_x >> velocity_y >> velocity_z
@@ -163,7 +172,7 @@ public:
 
 			index += 1;
 		}
-		//bodies_soa = std::move(soa);		// might be error prone here
+		//bodies_soa = std::move(soa);								// might be error prone
 	}
 
 	void aosoa_setup(const std::string& filename) {

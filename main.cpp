@@ -1,5 +1,10 @@
-﻿#include <iostream>
-#include <cmath>
+﻿#include "NBodySimulation.h"
+#include "thread_safety.h"
+#include "debug.h"
+#include "IO.h"
+
+#include <iostream>
+#include <cstddef>
 #include <vector>
 #include <omp.h>
 #include <concepts>
@@ -10,133 +15,69 @@
 #include <utility>
 #include <array>
 #include <chrono>
-#include "NBodySimulation.h"
-#include "IO.h"
-hello
-constexpr double gravity{ 9.81 };       // gravity
+#include <span>
+
+constexpr double gravity{ 9.81 };       
 
 template <typename T> 
 concept Numeric = std::is_arithmetic_v<T>; 
 
-template <Numeric T> 
-T factorial(T number) {
+template <typename C> 
+concept Class = std::is_class_v<C>; 
+
+template <typename T, typename...Args>
+constexpr T constexpr_passer(Args...argument, T(*function)(...)) {
+    return function(argument); 
+}
+
+static constexpr int factorial(const int number) {
+#ifdef ENABLE_DEBUG
+    std::cout << "factorial called" << "\n"; 
+#endif
     if (number <= 1) {
         return 1; 
     }
-    T answer{ 1 }; 
-    for (T i{ 2 }; i <= number; ++i) {
+    int answer{ 1 }; 
+    for (int i{ 2 }; i <= number; ++i) {
         answer *= i; 
     }
     return answer; 
 }
 
-template <Numeric T> 
-T sqrt(T num) {
-    return; 
-}
-
 template <Numeric T>
-T calculate_magnitude(const T* first, const T* second) {
-	T dx = second[0] - first[0];
-	T dy = second[1] - first[1];
-	T dz = second[2] - first[2];
-	return std::sqrt(dx * dx + dy * dy + dz * dz);
+T calculate_magnitude(const std::span<T>& first, const std::span<T>& second) {
+#ifdef ENABLE_DEBUG
+    std::cout << "caculate_magnitude called" << "\n"; 
+#endif
+	return std::sqrt((second[0] - first[0]) * (second[0] - first[0]) +
+		(second[1] - first[0]) * (second[1] - first[0]) +
+		(second[2] - first[2]) * (second[2] - first[2]));
 }
 
 template <Numeric T> 
-T calculate_magnitude(std::vector<T> first, std::vector<T> second) {
-    // perhaps be vectorized
-    T magnitude = std::sqrt((second[0]-first[0])*(second[0]-first[0]) + 
-                (second[1]-first[0])*(second[1]-first[0]) +
-                (second[2]-first[2])*(second[2]-first[2])); 
-    return magnitude; 
-}
-
-template <Numeric T> 
-T compute_forces(const std::pair<Body, Body>& body_pair) {
-    // for each pair of bodies i, j, return gravitational force
-    // formula: 
-    // F_ij = G * ( mass of i * mass of j) / abs( pos of j - pos of i )^3 * (pos of j - pos of i)
-    // subtracting position and powering it is vector subtraction and multiplication
-    // however it is just for one iteration with each vector limited at size 3. 
-    T mass_i{ body_pair.first.mass };
-    T mass_j{ body_pair.second.mass };
-    T pos_i{ body_pair.first.x };
-    T pos_j{ body_pair.second.x };
-    T force{ gravity * (mass_i * mass_j) / calculate_magnitude(pos_i, pos_j) * (pos_j - pos_i) };
-    return force; 
-}
-
-template <Numeric T> 
-T compute_forces(const Body& body_one, const Body& body_two) {
-    // for each pair of bodies i, j, return gravitational force
-    // formula: 
-    // F_ij = G * ( mass of i * mass of j) / abs( pos of j - pos of i )^3 * (pos of j - pos of i)
-    // subtracting position and powering it is vector subtraction and multiplication
-    // however it is just for one iteration with each vector limited at size 3. 
-    T mass_i{ body_one.mass };
-    T mass_j{ body_two.mass };
-    T pos_i{ body_one.x };
-    T pos_j{ body_two.x };
-    T force{ gravity * (mass_i * mass_j) / calculate_magnitude(pos_i, pos_j) * (pos_j - pos_i) };
+T compute_force(const Body& body_one, const Body& body_two) {
+#ifdef ENABLE_DEBUG
+    std::cout << "compute_force called" << "\n"; 
+#endif
+    T force{ gravity * (body_one.mass * body_two.mass) 
+        / calculate_magnitude(body_one.x, body_two.x) * (body_two.x - body_one.x) };
 	return force;
 }
 
-template<Numeric T> 
-std::unordered_map<Body, T> sum_forces(std::vector<Body> bodies) {
-    std::unordered_map<Body, T> forces; 
-    for (size_t i = 0; i < bodies.size(); ++i) {        // O(n)
-        for (size_t j = 0; j < bodies.size(); ++j) {    // O(n) 
-            forces[bodies[i]] += compute_forces(std::make_pair(bodies[i], bodies[j])); 
-        }
-    }
-    return forces; 
-}
-
-template <Numeric T> 
-T sum_forces(Body body, std::vector<Body> bodies) {
+template <Numeric T, Class C> 
+T sum_forces(C body, std::vector<C> bodies) {
     T total_force{}; 
-    for (size_t i{}; i < bodies.size(); ++i) {
-        total_force += compute_forces(body, bodies[i]); 
+    size_t bodies_size{ bodies.size() };
+    for (size_t i{}; i < bodies_size; ++i) {
+        total_force += compute_force(body, bodies[i]); 
     }
     return total_force; 
 }
 
-template<Numeric T> 
-void ader_timestepping(T initial, T order, T timestep, T endtime, Function<T>& function) {
-    T curr_val = initial;
-    for (T t = 0; t < end_time; t += timestep) {
-        T increment = function.evaluate(t);
-        // Compute Taylor series terms
-        for (T k = 1; k < M; ++k) {
-            auto temp = function.clone(); // clone
-            // Compute k-th derivative
-            for (int j = 0; j < k; ++j) {
-                temp->derive();
-            }
-            T derivative_val = temp->evaluate(t);
-            T term = derivative_val * std::pow(timestep, k) / factorial(k);
-            increment += term;
-        }
-        curr_val += timestep * increment;
-        std::cout << "Time Step: " << t << " | Value: " << curr_val << std::endl;
-    }
-}
-
-template <Numeric T> 
-void runge_kutta(std::vector<Body> bodies) {
-	/*k1 = f(t, y)
-		k2 = f(t + Δt / 2, y + k1·Δt / 2)
-		k3 = f(t + Δt / 2, y + k2·Δt / 2)
-		k4 = f(t + Δt, y + k3·Δt)
-		y(t + Δt) = y(t) + Δt / 6·(k1 + 2k2 + 2k3 + k4)*/
-
-
-}
-
-template<Numeric T> 
-void explicit_euler_single_timestep(std::vector<Body> bodies, T timestep) {
-    for (size_t i{}; i < bodies.size(); ++i) {
+template<Numeric T, Class C> 
+void explicit_euler_single_timestep(std::vector<C> bodies, T timestep) {
+    size_t bodies_size{ bodies.size() }; 
+    for (size_t i{}; i < bodies_size; ++i) {
         T acceleration = sum_forces(bodies[j]) / bodies[j].mass; 
         for (int j{}; j < 3; ++j) {
             bodies[i].x[j] += bodies[i].v[j] * timestep; 
@@ -151,8 +92,8 @@ void explicit_euler_soa() {
 
 }
 
-template<Numeric T> 
-void explicit_euler(std::vector<Body> bodies, std::vector<Body> lagging_bodies, T timestep, T endtime) {
+template<Numeric T, Class C> 
+void explicit_euler(std::vector<C> bodies, std::vector<C> lagging_bodies, T timestep, T endtime) {
     // @ params
     // timestep         = delta t, dt
     // 
@@ -255,11 +196,11 @@ void explicit_euler(std::vector<Body> bodies, std::vector<Body> lagging_bodies, 
 //    }
 //}
 
-template <Numeric T> 
-void collision_handler(std::vector<Body>& bodies, const double C) {
-    
-    for (size_t i{}; i < bodies.size(); ++i) {
-        for (size_t j{i+1}; j < bodies.size(); ++j) {
+template <Numeric T, Class C> 
+void collision_handler(std::vector<C>& bodies, const double C) {
+    size_t bodies_size{ bodies.size() }; 
+    for (size_t i{}; i < bodies_size; ++i) {
+        for (size_t j{i+1}; j < bodies_size; ++j) {
             if (calculate_magnitude<T>(bodies[i].x, bodies[j].x) <= C * (bodies[i].mass + bodies[j].mass)) {
                 double total_mass{ bodies[i].mass + bodies[j].mass }; 
                 for (int k{ 0 }; k < 3; ++k) {
@@ -277,8 +218,8 @@ void collision_handler(std::vector<Body>& bodies, const double C) {
     }
 }
 
-template <Numeric T>
-void collision_handler(std::vector<Body>& bodies, std::vector<Body>& lagging_bodies, const double C) {
+template <Numeric T, Class C>
+void collision_handler(std::vector<C>& bodies, std::vector<C>& lagging_bodies, const double C) {
     // might need to deal with floating point precision when colliding. 
 	std::vector<bool> merged(bodies.size(), false);
 
@@ -325,7 +266,7 @@ int main(int argc, char** argv) {
     // Write initial snapshot
     openPVDFile();
     int snapshotCounter = 0;
-    writeVTKSnapshot(nbs, AOS, snapshotCounter);
+    writeVTKSnapshot(nbs, snapshotCounter);
     addSnapshotToPVD(snapshotCounter);
 
     int N = (int)nbs.number_of_bodies;  
@@ -348,8 +289,8 @@ int main(int argc, char** argv) {
     }
 
    closePVDFile();
-   auto simulation_time = std::chrono::steady_clock::now(); 
-   std::chrono::duration<double> time_elapsed = simulation_time - start; 
+   auto simulation_time{ std::chrono::steady_clock::now() };
+   std::chrono::duration<double> time_elapsed{ simulation_time - start };
    std::cout << "Simulation completed in " << time_elapsed.count() << " seconds.\n";
    
    return 0;
